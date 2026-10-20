@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analisis Model — Calorie Burn Predictor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+
+<!-- ══ NAVBAR ══════════════════════════════════════════════════════════════ -->
+<nav class="navbar">
+    <div class="navbar-inner">
+        <a href="/" class="navbar-brand">
+            <span class="brand-icon">🔥</span>
+            Calorie Burn Predictor
+        </a>
+        <ul class="nav-links">
+            <li><a href="/">Beranda</a></li>
+            <li><a href="/analysis" class="active">Analisis Model</a></li>
+            <li><a href="/about">Tentang</a></li>
+        </ul>
+    </div>
+</nav>
+
+<!-- ══ KONTEN ══════════════════════════════════════════════════════════════ -->
+<div class="main-container">
+
+    <div class="page-header">
+        <h2>📊 Analisis Model Regresi Linear</h2>
+        <p>Evaluasi lengkap model: informasi dataset, metrik performa, visualisasi, dan interpretasi hasil.</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BAGIAN 1 — INFORMASI DATASET
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="section-title">📁 Bagian 1 — Informasi Dataset</div>
+
+    <div class="card" style="margin-bottom: 28px;">
+        <div class="card-title">
+            <span class="icon">📂</span>
+            Ringkasan Dataset
+        </div>
+        <div class="dataset-grid">
+            <div class="dataset-item">
+                <div class="dataset-label">Total Data</div>
+                <div class="dataset-value">{{ stats.n_total | int }}</div>
+                <div class="dataset-sub">baris setelah preprocessing</div>
+            </div>
+            <div class="dataset-item">
+                <div class="dataset-label">Data Training</div>
+                <div class="dataset-value">{{ stats.n_train | int }}</div>
+                <div class="dataset-sub">80% dari total data</div>
+            </div>
+            <div class="dataset-item">
+                <div class="dataset-label">Data Testing</div>
+                <div class="dataset-value">{{ stats.n_test | int }}</div>
+                <div class="dataset-sub">20% dari total data</div>
+            </div>
+            <div class="dataset-item">
+                <div class="dataset-label">Min Duration</div>
+                <div class="dataset-value">{{ stats.dur_min | int }} <span class="unit-small">menit</span></div>
+                <div class="dataset-sub">durasi terpendek</div>
+            </div>
+            <div class="dataset-item">
+                <div class="dataset-label">Max Duration</div>
+                <div class="dataset-value">{{ stats.dur_max | int }} <span class="unit-small">menit</span></div>
+                <div class="dataset-sub">durasi terpanjang</div>
+            </div>
+            <div class="dataset-item">
+                <div class="dataset-label">Min Calories</div>
+                <div class="dataset-value">{{ stats.cal_min | int }} <span class="unit-small">kcal</span></div>
+                <div class="dataset-sub">kalori terendah</div>
+            </div>
+            <div class="dataset-item">
+                <div class="dataset-label">Max Calories</div>
+                <div class="dataset-value">{{ stats.cal_max | int }} <span class="unit-small">kcal</span></div>
+                <div class="dataset-sub">kalori tertinggi</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BAGIAN 2 — EVALUASI MODEL
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="section-title">📐 Bagian 2 — Evaluasi Model</div>
+
+    <div style="margin-bottom: 8px;">
+        <div class="eval-note">
+            ⚠️ Seluruh metrik dihitung menggunakan <strong>data testing (20%)</strong> —
+            bukan keseluruhan dataset.
+        </div>
+    </div>
+
+    <div class="metrics-grid" style="margin-bottom: 28px;">
+
+        <div class="metric-card blue">
+            <div class="metric-label">R² Score</div>
+            <div class="metric-value">{{ stats.r2 }}</div>
+            <div class="metric-desc">Koefisien Determinasi</div>
+        </div>
+
+        <div class="metric-card green">
+            <div class="metric-label">MAE</div>
+            <div class="metric-value">{{ stats.mae }}</div>
+            <div class="metric-desc">Mean Absolute Error (kcal)</div>
+        </div>
+
+        <div class="metric-card orange">
+            <div class="metric-label">MSE</div>
+            <div class="metric-value">{{ stats.mse }}</div>
+            <div class="metric-desc">Mean Squared Error (kcal²)</div>
+        </div>
+
+        <div class="metric-card red">
+            <div class="metric-label">RMSE</div>
+            <div class="metric-value">{{ stats.rmse }}</div>
+            <div class="metric-desc">Root Mean Squared Error (kcal)</div>
+        </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BAGIAN 3 — INTERPRETASI METRIK
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="section-title">🔍 Bagian 3 — Interpretasi Metrik</div>
+
+    <div class="interpretation" style="margin-bottom: 28px;">
+
+        <div class="interp-item">
+            <span class="interp-badge">R²</span>
+            <div class="interp-text">
+                <strong>R² menunjukkan seberapa besar variasi jumlah kalori terbakar yang dapat
+                dijelaskan oleh Duration dalam model.</strong><br />
+                Nilai R² = <strong>{{ stats.r2 }}</strong> berarti sekitar
+                <strong>{{ (stats.r2 * 100) | round(2) }}%</strong> variasi Calories
+                pada data testing dapat dijelaskan oleh Duration dalam model ini.
+            </div>
+        </div>
+
+        <div class="interp-item">
+            <span class="interp-badge">MAE</span>
+            <div class="interp-text">
+                <strong>MAE menunjukkan rata-rata selisih absolut antara nilai aktual dan nilai
+                prediksi dalam satuan kcal.</strong><br />
+                Nilai MAE = <strong>{{ stats.mae }} kcal</strong> berarti rata-rata kesalahan
+                prediksi model adalah sekitar {{ stats.mae }} kcal pada data testing.
+            </div>
+        </div>
+
+        <div class="interp-item">
+            <span class="interp-badge">MSE</span>
+            <div class="interp-text">
+                <strong>MSE menunjukkan rata-rata kuadrat kesalahan antara nilai aktual dan
+                nilai prediksi. Semakin kecil nilai MSE, semakin kecil kesalahan prediksi.</strong><br />
+                Nilai MSE = <strong>{{ stats.mse }} kcal²</strong>. Karena MSE menggunakan
+                kuadrat, nilainya lebih sensitif terhadap kesalahan yang besar dibandingkan MAE.
+            </div>
+        </div>
+
+        <div class="interp-item">
+            <span class="interp-badge">RMSE</span>
+            <div class="interp-text">
+                <strong>RMSE menunjukkan besar kesalahan prediksi dalam satuan kcal.
+                Nilai yang lebih kecil menunjukkan prediksi yang lebih dekat dengan nilai aktual.</strong><br />
+                Nilai RMSE = <strong>{{ stats.rmse }} kcal</strong>. RMSE adalah akar dari MSE
+                sehingga memiliki satuan yang sama dengan Calories (kcal), membuatnya lebih
+                mudah diinterpretasikan.
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BAGIAN 4 — PERSAMAAN REGRESI
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="section-title">📏 Bagian 4 — Persamaan Regresi</div>
+
+    <div class="card" style="margin-bottom: 28px; text-align: center;">
+        <div class="card-title" style="justify-content: center; margin-bottom: 16px;">
+            <span class="icon">📐</span>
+            Persamaan Model Linear Regression
+        </div>
+
+        <!-- Persamaan umum -->
+        <div class="equation-display-secondary">
+            Y = β₀ + β₁X
+        </div>
+
+        <!-- Persamaan dengan nilai aktual dari model -->
+        <div class="equation-display-primary">
+            {{ equation }}
+        </div>
+
+        <div class="equation-meta">
+            Intercept (β₀) = <strong>{{ stats.intercept }}</strong>
+            &nbsp;|&nbsp;
+            Koefisien / Slope (β₁) = <strong>{{ stats.slope }}</strong>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BAGIAN 5 — INTERPRETASI KOEFISIEN
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="section-title">📖 Bagian 5 — Interpretasi Koefisien</div>
+
+    <div class="card" style="margin-bottom: 28px;">
+        <div class="card-title">
+            <span class="icon">🔢</span>
+            Interpretasi Koefisien Model
+        </div>
+
+        <div class="interp-item" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
+            <span class="interp-badge">Slope</span>
+            <div class="interp-text">
+                Setiap penambahan <strong>1 menit</strong> durasi olahraga diperkirakan
+                berkaitan dengan peningkatan kalori terbakar sebesar sekitar
+                <strong>{{ stats.slope }} kcal</strong> berdasarkan model.
+            </div>
+        </div>
+
+        <div class="interp-item" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0; margin-top: 14px;">
+            <span class="interp-badge">Intercept</span>
+            <div class="interp-text">
+                Nilai intercept sebesar <strong>{{ stats.intercept }}</strong> adalah titik
+                awal garis regresi ketika Duration = 0. Dalam konteks praktis, nilai ini
+                bersifat teknis dan tidak memiliki makna langsung karena olahraga 0 menit
+                tidak relevan secara fisiologis.
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BAGIAN 6 — INTERPRETASI R²
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="section-title">🎯 Bagian 6 — Interpretasi R²</div>
+
+    <div class="card" style="margin-bottom: 28px;">
+        <div class="card-title">
+            <span class="icon">🎯</span>
+            Interpretasi Nilai R²
+        </div>
+        <div style="font-size: 0.95rem; color: var(--text-mid); line-height: 1.75;">
+            Model memiliki R² sebesar <strong>{{ stats.r2 }}</strong>. Artinya, sekitar
+            <strong>{{ (stats.r2 * 100) | round(2) }}%</strong> variasi Calories pada
+            data testing dapat dijelaskan oleh Duration dalam model ini.
+        </div>
+        <!-- Indikator visual R² -->
+        <div style="margin-top: 16px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem;
+                        color: var(--text-light); margin-bottom: 6px;">
+                <span>0.0 (Model buruk)</span>
+                <span>1.0 (Model sempurna)</span>
+            </div>
+            <div style="background: var(--border); border-radius: 20px; height: 10px; overflow: hidden;">
+                <div style="background: linear-gradient(90deg, var(--accent), var(--primary));
+                            height: 100%; border-radius: 20px;
+                            width: {{ (stats.r2 * 100) | round(1) }}%;
+                            transition: width 0.5s ease;">
+                </div>
+            </div>
+            <div style="text-align: right; font-size: 0.82rem; color: var(--primary);
+                        font-weight: 700; margin-top: 4px;">
+                R² = {{ stats.r2 }} ({{ (stats.r2 * 100) | round(1) }}%)
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BAGIAN 7 — VISUALISASI REGRESI
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="section-title">📈 Visualisasi Regresi Linear</div>
+
+    <div class="plot-wrapper" style="margin-bottom: 28px;">
+        <div class="card-title" style="margin-bottom: 16px;">
+            <span class="icon">📊</span>
+            Grafik: Durasi Olahraga vs Kalori Terbakar
+        </div>
+        <img
+            src="{{ url_for('static', filename='images/regression_plot.png') }}"
+            alt="Grafik Regresi Linear — Durasi vs Kalori"
+            style="max-width: 100%; border-radius: 8px;"
+        />
+        <p style="font-size: 0.8rem; color: var(--text-light); margin-top: 10px; text-align: center;">
+            🔵 Titik biru = data aktual &nbsp;|&nbsp; 🔴 Garis merah = garis regresi linear dari model
+        </p>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BAGIAN 8 — KETERBATASAN MODEL
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="section-title">⚠️ Keterbatasan Model</div>
+
+    <div class="card limitation-card" style="margin-bottom: 28px;">
+        <div class="card-title">
+            <span class="icon">⚠️</span>
+            Keterbatasan Model
+        </div>
+
+        <div class="limitation-item">
+            <div class="limitation-dot"></div>
+            <div class="interp-text">
+                Model hanya menggunakan <strong>Duration</strong> sebagai satu-satunya
+                variabel prediktor. Jumlah kalori yang terbakar sebenarnya dapat dipengaruhi
+                oleh berbagai faktor lain seperti berat badan, usia, jenis kelamin,
+                detak jantung, intensitas olahraga, dan kondisi individu.
+            </div>
+        </div>
+
+        <div class="limitation-item">
+            <div class="limitation-dot"></div>
+            <div class="interp-text">
+                Karena model hanya menggunakan satu variabel input, hasil prediksi merupakan
+                <strong>estimasi</strong> berdasarkan pola pada dataset dan tidak dapat
+                dianggap sebagai pengukuran kalori yang sebenarnya.
+            </div>
+        </div>
+
+        <div class="limitation-item">
+            <div class="limitation-dot"></div>
+            <div class="interp-text">
+                Model hanya valid untuk input dalam rentang data training
+                (<strong>{{ stats.dur_min | int }}–{{ stats.dur_max | int }} menit</strong>).
+                Penggunaan di luar rentang ini (ekstrapolasi) dapat menghasilkan prediksi
+                yang tidak dapat diandalkan.
+            </div>
+        </div>
+    </div>
+
+</div><!-- /main-container -->
+
+<!-- ══ FOOTER ══════════════════════════════════════════════════════════════ -->
+<footer class="footer">
+    Calorie Burn Predictor — Implementasi Regresi Linear Sederhana 
+</footer>
+
+</body>
+</html>

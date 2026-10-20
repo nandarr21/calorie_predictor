@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calorie Burn Predictor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+
+<!-- ══ NAVBAR ══════════════════════════════════════════════════════════════ -->
+<nav class="navbar">
+    <div class="navbar-inner">
+        <a href="/" class="navbar-brand">
+            <span class="brand-icon">🔥</span>
+            Calorie Burn Predictor
+        </a>
+        <ul class="nav-links">
+            <li><a href="/" class="active">Beranda</a></li>
+            <li><a href="/analysis">Analisis Model</a></li>
+            <li><a href="/about">Tentang</a></li>
+        </ul>
+    </div>
+</nav>
+
+<!-- ══ HERO ════════════════════════════════════════════════════════════════ -->
+<section class="hero">
+    <h1>🏃 Calorie Burn Predictor</h1>
+    <p class="subtitle">Prediksi Kalori Terbakar Berdasarkan Durasi Olahraga</p>
+</section>
+
+<!-- ══ KONTEN UTAMA ════════════════════════════════════════════════════════ -->
+<div class="main-container">
+
+    <!-- Statistik ringkas model — 3 kartu utama -->
+    <div class="info-grid">
+        <div class="info-item">
+            <div class="info-icon">📊</div>
+            <div class="info-val">{{ stats.n_total | int }}</div>
+            <div class="info-lbl">Jumlah Data</div>
+        </div>
+        <div class="info-item">
+            <div class="info-icon">🎯</div>
+            <div class="info-val">{{ stats.r2 }}</div>
+            <div class="info-lbl">R² Score</div>
+        </div>
+        <div class="info-item">
+            <div class="info-icon">📉</div>
+            <div class="info-val">{{ stats.mae }}</div>
+            <div class="info-lbl">MAE (kcal)</div>
+        </div>
+    </div>
+
+    <!-- Grid dua kolom: form kiri, hasil kanan -->
+    <div class="grid-2" style="margin-top: 28px;">
+
+        <!-- ─ FORM PREDIKSI ─────────────────────────────────────────────── -->
+        <div class="card">
+            <div class="card-title">
+                <span class="icon">⏱️</span>
+                Masukkan Durasi Olahraga
+            </div>
+
+            <!-- Alert error -->
+            <div class="alert alert-error" id="alertError">
+                <span>⚠️</span>
+                <span id="errorMsg">Terjadi kesalahan.</span>
+            </div>
+
+            <!-- Alert sukses -->
+            <div class="alert alert-success" id="alertSuccess">
+                <span>✅</span>
+                <span>Prediksi berhasil dihitung!</span>
+            </div>
+
+            <form id="predictionForm" novalidate>
+                <div class="form-group">
+                    <label class="form-label" for="durationInput">Durasi Olahraga (Menit)</label>
+                    <input
+                        type="number"
+                        id="durationInput"
+                        class="form-input"
+                        placeholder="Masukkan durasi olahraga"
+                        min="{{ stats.dur_min | int }}"
+                        max="{{ stats.dur_max | int }}"
+                        step="0.5"
+                        autocomplete="off"
+                    />
+                    <div class="form-hint">
+                        Masukkan durasi antara
+                        <strong>{{ stats.dur_min | int }}–{{ stats.dur_max | int }} menit</strong>
+                        berdasarkan rentang data training.
+                    </div>
+                </div>
+
+                <div class="btn-row">
+                    <button type="submit" class="btn btn-primary" id="btnPredict">
+                        <span class="spinner" id="spinner"></span>
+                        <span id="btnText">🔮 Prediksi Kalori</span>
+                    </button>
+                    <button type="button" class="btn btn-reset" id="btnReset">
+                        🔄 Reset
+                    </button>
+                </div>
+            </form>
+
+            <!-- Keterangan rentang dan model -->
+            <div class="info-hint-box" style="margin-top: 20px;">
+                💡 <strong>Catatan:</strong> Model hanya mempertimbangkan durasi olahraga
+                dalam rentang <strong>{{ stats.dur_min | int }}–{{ stats.dur_max | int }} menit</strong>.
+                Input di luar rentang tidak akan diproses untuk menghindari ekstrapolasi model.
+            </div>
+        </div>
+
+        <!-- ─ HASIL PREDIKSI ────────────────────────────────────────────── -->
+        <div>
+            <!-- Placeholder sebelum prediksi -->
+            <div class="card text-center" id="placeholderCard">
+                <div style="padding: 32px 0; color: var(--text-light);">
+                    <div style="font-size: 3rem; margin-bottom: 12px;">🏋️</div>
+                    <div style="font-size: 1rem; font-weight: 600; color: var(--text-mid);">Hasil Prediksi</div>
+                    <div style="font-size: 0.875rem; margin-top: 6px; color: var(--text-light);">
+                        Isi durasi olahraga dan tekan<br />
+                        <strong>"Prediksi Kalori"</strong> untuk melihat estimasi.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kartu hasil prediksi (muncul setelah submit) -->
+            <div class="result-card" id="resultCard">
+                <div class="result-label">🔥 ESTIMASI KALORI TERBAKAR</div>
+                <div class="result-value" id="resultValue">0</div>
+                <div class="result-unit">kcal</div>
+
+                <div class="result-details">
+                    <div class="result-detail-row">
+                        <span class="result-detail-key">⏱️ Durasi Olahraga</span>
+                        <span class="result-detail-val" id="detailDuration">—</span>
+                    </div>
+                    <div class="result-detail-row">
+                        <span class="result-detail-key">🔥 Kalori Terbakar</span>
+                        <span class="result-detail-val" id="detailCalories">—</span>
+                    </div>
+                </div>
+
+                <!-- Persamaan regresi -->
+                <div class="equation-box" id="equationBox">
+                    Calories = ? + ? × Duration
+                </div>
+
+                <!-- Disclaimer -->
+                <div style="margin-top: 14px; font-size: 0.78rem; opacity: 0.75; line-height: 1.55; text-align: left;
+                            background: rgba(255,255,255,0.12); border-radius: 8px; padding: 10px 14px;">
+                    ℹ️ Hasil merupakan estimasi berdasarkan model Regresi Linear Sederhana
+                    dan bukan pengukuran langsung kalori yang terbakar.
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /grid-2 -->
+
+    <!-- Tombol navigasi ke halaman lain -->
+    <div style="text-align: center; margin-top: 40px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+        <a href="/analysis" class="btn btn-primary" style="text-decoration: none;">
+            📊 Lihat Analisis Model
+        </a>
+        <a href="/about" class="btn btn-reset" style="text-decoration: none;">
+            ℹ️ Tentang Aplikasi
+        </a>
+    </div>
+
+</div><!-- /main-container -->
+
+<!-- ══ FOOTER ══════════════════════════════════════════════════════════════ -->
+<footer class="footer">
+    Calorie Burn Predictor — Implementasi Regresi Linear Sederhana 
+  
+</footer>
+
+<!-- ══ JAVASCRIPT ══════════════════════════════════════════════════════════ -->
+<script>
+    // Ambil rentang valid dari atribut input (berasal dari server)
+    const DUR_MIN = parseFloat(document.getElementById('durationInput').min);
+    const DUR_MAX = parseFloat(document.getElementById('durationInput').max);
+
+    const form         = document.getElementById('predictionForm');
+    const input        = document.getElementById('durationInput');
+    const btnPredict   = document.getElementById('btnPredict');
+    const btnReset     = document.getElementById('btnReset');
+    const btnText      = document.getElementById('btnText');
+    const spinner      = document.getElementById('spinner');
+    const alertError   = document.getElementById('alertError');
+    const alertSuccess = document.getElementById('alertSuccess');
+    const errorMsg     = document.getElementById('errorMsg');
+
+    const placeholderCard = document.getElementById('placeholderCard');
+    const resultCard      = document.getElementById('resultCard');
+    const resultValue     = document.getElementById('resultValue');
+    const detailDuration  = document.getElementById('detailDuration');
+    const detailCalories  = document.getElementById('detailCalories');
+    const equationBox     = document.getElementById('equationBox');
+
+    // ── Tampilkan pesan error ──────────────────────────────────────────────
+    function showError(msg) {
+        errorMsg.textContent = msg;
+        alertError.classList.add('show');
+        alertSuccess.classList.remove('show');
+        input.classList.add('error');
+    }
+
+    // ── Bersihkan semua alert ──────────────────────────────────────────────
+    function clearAlerts() {
+        alertError.classList.remove('show');
+        alertSuccess.classList.remove('show');
+        input.classList.remove('error');
+    }
+
+    // ── Validasi input sisi frontend ───────────────────────────────────────
+    function validateInput(val) {
+        if (val === '' || val === null || val === undefined) {
+            return 'Durasi olahraga wajib diisi.';
+        }
+        const num = parseFloat(val);
+        if (isNaN(num)) {
+            return 'Durasi harus berupa angka.';
+        }
+        if (num <= 0) {
+            return 'Durasi olahraga harus lebih dari 0 menit.';
+        }
+        if (num < DUR_MIN || num > DUR_MAX) {
+            return `Durasi berada di luar rentang data training. Masukkan durasi antara ${DUR_MIN}–${DUR_MAX} menit.`;
+        }
+        return null; // valid
+    }
+
+    // ── Tampilkan hasil prediksi ───────────────────────────────────────────
+    function showResult(data) {
+        placeholderCard.style.display = 'none';
+        resultCard.classList.add('show');
+
+        resultValue.textContent    = data.prediction.toFixed(2);
+        detailDuration.textContent = data.duration + ' menit';
+        detailCalories.textContent = data.prediction.toFixed(2) + ' kcal';
+        equationBox.textContent    = data.equation;
+    }
+
+    // ── Loading state ──────────────────────────────────────────────────────
+    function setLoading(isLoading) {
+        btnPredict.disabled = isLoading;
+        spinner.classList.toggle('show', isLoading);
+        btnText.textContent = isLoading ? 'Menghitung...' : '🔮 Prediksi Kalori';
+    }
+
+    // ── Submit form — kirim request ke /predict ────────────────────────────
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        clearAlerts();
+
+        const val    = input.value.trim();
+        const errMsg = validateInput(val);
+
+        if (errMsg) {
+            showError(errMsg);
+            input.focus();
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            const response = await fetch('/predict', {
+                method : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body   : JSON.stringify({ duration: parseFloat(val) }),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showResult(data);
+                alertSuccess.classList.add('show');
+                setTimeout(() => alertSuccess.classList.remove('show'), 2500);
+            } else {
+                showError(data.error || 'Terjadi kesalahan pada server.');
+            }
+        } catch (err) {
+            showError('Gagal menghubungi server. Pastikan Flask sudah berjalan.');
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    // ── Tombol Reset ───────────────────────────────────────────────────────
+    btnReset.addEventListener('click', function () {
+        input.value = '';
+        clearAlerts();
+        resultCard.classList.remove('show');
+        placeholderCard.style.display = '';
+        btnText.textContent = '🔮 Prediksi Kalori';
+        btnPredict.disabled = false;
+        input.focus();
+    });
+
+    // ── Hapus error saat user mulai mengetik ──────────────────────────────
+    input.addEventListener('input', function () {
+        if (alertError.classList.contains('show')) clearAlerts();
+    });
+</script>
+
+</body>
+</html>
