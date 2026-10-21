@@ -319,6 +319,20 @@ def about():
     return render_template('about.html', stats=model_stats)
 
 
+@app.route('/debug')
+@app.route('/api/debug')
+def debug_route():
+    return jsonify({
+        'path': request.path,
+        'full_path': request.full_path,
+        'environ_path_info': request.environ.get('PATH_INFO'),
+        'environ_request_uri': request.environ.get('REQUEST_URI'),
+        'environ_script_name': request.environ.get('SCRIPT_NAME'),
+        'x_matched_path': request.headers.get('x-matched-path'),
+        'x_forwarded_uri': request.headers.get('x-forwarded-uri'),
+        'headers': dict(request.headers)
+    })
+
 @app.errorhandler(404)
 def not_found(e):
     # Fallback jika URL dialihkan ke route root
