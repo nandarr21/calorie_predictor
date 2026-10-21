@@ -248,27 +248,45 @@ def format_equation(intercept, slope, decimals=4):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# ROUTE — ENDPOINT (Mendukung path langsung maupun rewrite Vercel)
+# WSGI MIDDLEWARE — RESTORE VERCEL REWRITE PATH
+# ═════════════════════════════════════════════════════════════════════════════
+
+class VercelPathMiddleware:
+    """
+    WSGI Middleware untuk menangani URL rewrites pada Vercel Serverless.
+    Mengekstrak query parameter __path__ dan mengembalikan PATH_INFO asli
+    sehingga routing Flask (@app.route) bekerja normal seperti di localhost.
+    """
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        query = environ.get('QUERY_STRING', '')
+        if '__path__=' in query:
+            import urllib.parse
+            params = urllib.parse.parse_qs(query, keep_blank_values=True)
+            if '__path__' in params:
+                p_list = params.pop('__path__')
+                p = p_list[0] if p_list else ''
+                if not p.startswith('/'):
+                    p = '/' + p
+                environ['PATH_INFO'] = p
+                environ['QUERY_STRING'] = urllib.parse.urlencode(params, doseq=True)
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = VercelPathMiddleware(app.wsgi_app)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ROUTE — ENDPOINT
 # ═════════════════════════════════════════════════════════════════════════════
 
 @app.route('/')
-@app.route('/api')
-@app.route('/api/index', methods=['GET', 'POST'])
 def index():
-    if request.args.get('dump_env'):
-        return jsonify({
-            'PATH_INFO': request.environ.get('PATH_INFO'),
-            'REQUEST_URI': request.environ.get('REQUEST_URI'),
-            'RAW_URI': request.environ.get('RAW_URI'),
-            'headers': dict(request.headers),
-        })
-    if request.method == 'POST':
-        return predict()
     return render_template('index.html', stats=model_stats)
 
 
 @app.route('/predict', methods=['POST'])
-@app.route('/api/predict', methods=['POST'])
 def predict():
     data = request.get_json(silent=True)
 
@@ -314,36 +332,29 @@ def predict():
 
 
 @app.route('/analysis')
-@app.route('/api/analysis')
 def analysis():
     equation = format_equation(model_stats['intercept'], model_stats['slope'])
     return render_template('analysis.html', stats=model_stats, equation=equation)
 
 
 @app.route('/about')
-@app.route('/api/about')
 def about():
     return render_template('about.html', stats=model_stats)
 
 
 @app.route('/debug')
-@app.route('/api/debug')
 def debug_route():
     return jsonify({
         'path': request.path,
         'full_path': request.full_path,
         'environ_path_info': request.environ.get('PATH_INFO'),
-        'environ_request_uri': request.environ.get('REQUEST_URI'),
-        'environ_script_name': request.environ.get('SCRIPT_NAME'),
-        'x_matched_path': request.headers.get('x-matched-path'),
-        'x_forwarded_uri': request.headers.get('x-forwarded-uri'),
-        'headers': dict(request.headers)
+        'environ_query_string': request.environ.get('QUERY_STRING'),
     })
+
 
 @app.errorhandler(404)
 def not_found(e):
-    # Fallback jika URL dialihkan ke route root
-    return render_template('index.html', stats=model_stats)
+    return render_template('index.html', stats=model_stats), 404
 
 
 # ═════════════════════════════════════════════════════════════════════════════
