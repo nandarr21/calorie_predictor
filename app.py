@@ -122,7 +122,6 @@ def save_model(reg_model):
         with open(MODEL_PATH, 'wb') as f:
             pickle.dump(reg_model, f)
     except (OSError, PermissionError) as e:
-        # Di Vercel Serverless, direktori kode bersifat read-only
         print(f"[INFO] Filesystem read-only (Serverless): Lewati penyimpanan pickle.")
 
 
@@ -131,7 +130,6 @@ def save_model(reg_model):
 # ═════════════════════════════════════════════════════════════════════════════
 
 def generate_regression_plot(reg_model, X, y, dur_min, dur_max):
-    # Jika gambar sudah ada (misal di-deploy ke Vercel), tidak perlu generate ulang
     if os.path.exists(PLOT_PATH):
         return
 
@@ -186,7 +184,7 @@ def generate_regression_plot(reg_model, X, y, dur_min, dur_max):
 def initialize_model():
     global model, model_stats
 
-    # 1. Coba muat model tersimpan (.pkl) terlebih dahulu (paling cepat untuk serverless)
+    # 1. Coba muat model tersimpan (.pkl) terlebih dahulu
     if os.path.exists(MODEL_PATH):
         try:
             with open(MODEL_PATH, 'rb') as f:
@@ -250,15 +248,18 @@ def format_equation(intercept, slope, decimals=4):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# ROUTE — ENDPOINT
+# ROUTE — ENDPOINT (Mendukung path langsung maupun rewrite Vercel)
 # ═════════════════════════════════════════════════════════════════════════════
 
 @app.route('/')
+@app.route('/api')
+@app.route('/api/index')
 def index():
     return render_template('index.html', stats=model_stats)
 
 
 @app.route('/predict', methods=['POST'])
+@app.route('/api/predict', methods=['POST'])
 def predict():
     data = request.get_json(silent=True)
 
@@ -304,14 +305,22 @@ def predict():
 
 
 @app.route('/analysis')
+@app.route('/api/analysis')
 def analysis():
     equation = format_equation(model_stats['intercept'], model_stats['slope'])
     return render_template('analysis.html', stats=model_stats, equation=equation)
 
 
 @app.route('/about')
+@app.route('/api/about')
 def about():
     return render_template('about.html', stats=model_stats)
+
+
+@app.errorhandler(404)
+def not_found(e):
+    # Fallback jika URL dialihkan ke route root
+    return render_template('index.html', stats=model_stats)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
