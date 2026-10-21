@@ -251,10 +251,17 @@ def format_equation(intercept, slope, decimals=4):
 # ROUTE — ENDPOINT (Mendukung path langsung maupun rewrite Vercel)
 # ═════════════════════════════════════════════════════════════════════════════
 
+@app.route('/test-headers')
+def test_headers():
+    return jsonify({k: v for k, v in request.headers.items()})
+
+
 @app.route('/')
 @app.route('/api')
-@app.route('/api/index')
+@app.route('/api/index', methods=['GET', 'POST'])
 def index():
+    if request.method == 'POST':
+        return predict()
     return render_template('index.html', stats=model_stats)
 
 
