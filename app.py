@@ -255,6 +255,13 @@ def format_equation(intercept, slope, decimals=4):
 @app.route('/api')
 @app.route('/api/index', methods=['GET', 'POST'])
 def index():
+    if request.args.get('dump_env'):
+        return jsonify({
+            'PATH_INFO': request.environ.get('PATH_INFO'),
+            'REQUEST_URI': request.environ.get('REQUEST_URI'),
+            'RAW_URI': request.environ.get('RAW_URI'),
+            'headers': dict(request.headers),
+        })
     if request.method == 'POST':
         return predict()
     return render_template('index.html', stats=model_stats)
