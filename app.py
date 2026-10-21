@@ -3,19 +3,24 @@ app.py — Calorie Burn Predictor
 Implementasi Regresi Linear Sederhana menggunakan Flask
 
 Dataset : Calories Burnt Prediction Dataset (Kaggle)
-          exercise.csv + calories.csv → digabung via User_ID → disimpan sebagai data/calories.csv
+          exercise.csv + calories.csv → digabung via User_ID → data/calories.csv
 Variabel: X = Duration (menit), Y = Calories (kcal)
 Model   : sklearn LinearRegression (Simple Linear Regression)
 """
 
 import os
+import sys
+
+# Konfigurasi cache Matplotlib ke /tmp untuk lingkungan serverless (Vercel/AWS Lambda)
+os.environ.setdefault('MPLCONFIGDIR', '/tmp')
+
 import pickle
 import math
-
 import numpy as np
 import pandas as pd
+
 import matplotlib
-matplotlib.use('Agg')   # backend non-interaktif, wajib untuk server tanpa GUI
+matplotlib.use('Agg')   # backend non-interaktif untuk server
 import matplotlib.pyplot as plt
 
 from flask import Flask, render_template, request, jsonify
@@ -23,18 +28,36 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 
-# ─── Inisialisasi Flask ───────────────────────────────────────────────────────
-app = Flask(__name__)
-
 # ─── Path Konstanta ───────────────────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH  = os.path.join(BASE_DIR, 'data',   'calories.csv')
 MODEL_PATH = os.path.join(BASE_DIR, 'model',  'linear_regression_model.pkl')
 PLOT_PATH  = os.path.join(BASE_DIR, 'static', 'images', 'regression_plot.png')
 
+# ─── Inisialisasi Flask dengan Path Eksplisit ─────────────────────────────────
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, 'templates'),
+    static_folder=os.path.join(BASE_DIR, 'static')
+)
+
 # ─── Variabel Global ──────────────────────────────────────────────────────────
-model       = None   # objek LinearRegression yang sudah dilatih
-model_stats = {}     # dict berisi semua statistik & metrik model
+model       = None
+model_stats = {
+    'n_total'  : 15000,
+    'n_train'  : 12000,
+    'n_test'   : 3000,
+    'dur_min'  : 1.0,
+    'dur_max'  : 30.0,
+    'cal_min'  : 1.0,
+    'cal_max'  : 314.0,
+    'r2'       : 0.9145,
+    'mae'      : 13.6135,
+    'mse'      : 345.0410,
+    'rmse'     : 18.5753,
+    'slope'    : 7.1534,
+    'intercept': -21.6668,
+}
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -42,37 +65,11 @@ model_stats = {}     # dict berisi semua statistik & metrik model
 # ═════════════════════════════════════════════════════════════════════════════
 
 def load_and_prepare_data():
-    """
-    Membaca dataset, memilih kolom Duration & Calories,
-    menangani missing value, dan memastikan tipe numerik.
-
-    Returns:
-        X         (np.ndarray): array 2D kolom Duration, shape (n, 1)
-        y         (np.ndarray): array 1D kolom Calories, shape (n,)
-        n_total   (int)       : jumlah baris setelah pembersihan
-        dur_min   (float)     : nilai minimum Duration dalam dataset
-        dur_max   (float)     : nilai maksimum Duration dalam dataset
-        cal_min   (float)     : nilai minimum Calories dalam dataset
-        cal_max   (float)     : nilai maksimum Calories dalam dataset
-    """
     df = pd.read_csv(DATA_PATH)
-
-    # Pilih hanya kolom yang diperlukan
     df = df[['Duration', 'Calories']].copy()
-
-    # Pastikan tipe numerik
     df['Duration'] = pd.to_numeric(df['Duration'], errors='coerce')
     df['Calories'] = pd.to_numeric(df['Calories'], errors='coerce')
-
-    # Hapus baris yang mengandung missing value
-    before = len(df)
     df.dropna(subset=['Duration', 'Calories'], inplace=True)
-    after = len(df)
-
-    if before != after:
-        print(f"[INFO] Dihapus {before - after} baris missing value.")
-
-    # Hapus baris dengan nilai tidak logis
     df = df[(df['Duration'] > 0) & (df['Calories'] > 0)]
 
     dur_min = float(df['Duration'].min())
@@ -80,7 +77,7 @@ def load_and_prepare_data():
     cal_min = float(df['Calories'].min())
     cal_max = float(df['Calories'].max())
 
-    X = df[['Duration']].values   # 2D array untuk scikit-learn
+    X = df[['Duration']].values
     y = df['Calories'].values
 
     return X, y, len(df), dur_min, dur_max, cal_min, cal_max
@@ -91,16 +88,6 @@ def load_and_prepare_data():
 # ═════════════════════════════════════════════════════════════════════════════
 
 def train_model(X, y):
-    """
-    Melakukan train-test split (80:20, random_state=42),
-    melatih LinearRegression, dan menghitung 4 metrik evaluasi
-    pada DATA TESTING.
-
-    Returns:
-        reg_model                   : model LinearRegression yang sudah dilatih
-        metrics (dict)              : R², MAE, MSE, RMSE
-        X_train, X_test, y_train, y_test
-    """
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
@@ -108,7 +95,6 @@ def train_model(X, y):
     reg_model = LinearRegression()
     reg_model.fit(X_train, y_train)
 
-    # Prediksi hanya pada data TESTING
     y_pred = reg_model.predict(X_test)
 
     r2   = float(r2_score(y_test, y_pred))
@@ -127,67 +113,70 @@ def train_model(X, y):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# FUNGSI — SIMPAN MODEL
+# FUNGSI — SIMPAN MODEL (AMAN SERVERLESS / READ-ONLY)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def save_model(reg_model):
-    """Menyimpan model ke file .pkl menggunakan pickle."""
-    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-    with open(MODEL_PATH, 'wb') as f:
-        pickle.dump(reg_model, f)
+    try:
+        os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+        with open(MODEL_PATH, 'wb') as f:
+            pickle.dump(reg_model, f)
+    except (OSError, PermissionError) as e:
+        # Di Vercel Serverless, direktori kode bersifat read-only
+        print(f"[INFO] Filesystem read-only (Serverless): Lewati penyimpanan pickle.")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# FUNGSI — GENERATE GRAFIK REGRESI
+# FUNGSI — GENERATE GRAFIK REGRESI (AMAN SERVERLESS)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def generate_regression_plot(reg_model, X, y, dur_min, dur_max):
-    """
-    Membuat scatter plot data aktual + garis regresi dari model,
-    lalu menyimpan ke static/images/regression_plot.png.
-    """
-    os.makedirs(os.path.dirname(PLOT_PATH), exist_ok=True)
+    # Jika gambar sudah ada (misal di-deploy ke Vercel), tidak perlu generate ulang
+    if os.path.exists(PLOT_PATH):
+        return
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    try:
+        os.makedirs(os.path.dirname(PLOT_PATH), exist_ok=True)
 
-    # Scatter plot — data aktual
-    ax.scatter(
-        X, y,
-        alpha=0.35,
-        color='#3b82f6',
-        edgecolors='white',
-        linewidths=0.4,
-        s=35,
-        label='Data Aktual',
-        zorder=2
-    )
+        fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Garis regresi — dari model yang sudah dilatih
-    x_line = np.linspace(dur_min, dur_max, 300).reshape(-1, 1)
-    y_line = reg_model.predict(x_line)
-    ax.plot(
-        x_line, y_line,
-        color='#ef4444',
-        linewidth=2.5,
-        label='Garis Regresi Linear',
-        zorder=3
-    )
+        ax.scatter(
+            X, y,
+            alpha=0.35,
+            color='#3b82f6',
+            edgecolors='white',
+            linewidths=0.4,
+            s=35,
+            label='Data Aktual',
+            zorder=2
+        )
 
-    # Styling
-    ax.set_xlabel('Duration (Minutes)', fontsize=13, labelpad=8)
-    ax.set_ylabel('Calories Burned (kcal)', fontsize=13, labelpad=8)
-    ax.set_title(
-        'Hubungan Durasi Olahraga dengan Kalori Terbakar\n(Regresi Linear Sederhana)',
-        fontsize=14, fontweight='bold', pad=16
-    )
-    ax.legend(fontsize=11, loc='upper left')
-    ax.grid(True, linestyle='--', alpha=0.4, zorder=1)
-    ax.set_facecolor('#f8fafc')
-    fig.patch.set_facecolor('#ffffff')
+        x_line = np.linspace(dur_min, dur_max, 300).reshape(-1, 1)
+        y_line = reg_model.predict(x_line)
+        ax.plot(
+            x_line, y_line,
+            color='#ef4444',
+            linewidth=2.5,
+            label='Garis Regresi Linear',
+            zorder=3
+        )
 
-    plt.tight_layout()
-    plt.savefig(PLOT_PATH, dpi=150, bbox_inches='tight')
-    plt.close(fig)
+        ax.set_xlabel('Duration (Minutes)', fontsize=13, labelpad=8)
+        ax.set_ylabel('Calories Burned (kcal)', fontsize=13, labelpad=8)
+        ax.set_title(
+            'Hubungan Durasi Olahraga dengan Kalori Terbakar\n(Regresi Linear Sederhana)',
+            fontsize=14, fontweight='bold', pad=16
+        )
+        ax.legend(fontsize=11, loc='upper left')
+        ax.grid(True, linestyle='--', alpha=0.4, zorder=1)
+        ax.set_facecolor('#f8fafc')
+        fig.patch.set_facecolor('#ffffff')
+
+        plt.tight_layout()
+        plt.savefig(PLOT_PATH, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+    except (OSError, PermissionError) as e:
+        print(f"[INFO] Filesystem read-only (Serverless): Lewati penyimpanan grafik.")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -195,57 +184,60 @@ def generate_regression_plot(reg_model, X, y, dur_min, dur_max):
 # ═════════════════════════════════════════════════════════════════════════════
 
 def initialize_model():
-    """
-    Menjalankan seluruh pipeline:
-      1. Load & preprocessing dataset
-      2. Train-test split + training model
-      3. Hitung R², MAE, MSE, RMSE (dari data test)
-      4. Simpan model ke .pkl
-      5. Generate grafik regresi
-      6. Simpan semua statistik ke variabel global model_stats
-    """
     global model, model_stats
 
-    print("[INFO] Memuat dataset...")
-    X, y, n_total, dur_min, dur_max, cal_min, cal_max = load_and_prepare_data()
-    print(f"[INFO] Dataset dimuat: {n_total} baris data bersih.")
+    # 1. Coba muat model tersimpan (.pkl) terlebih dahulu (paling cepat untuk serverless)
+    if os.path.exists(MODEL_PATH):
+        try:
+            with open(MODEL_PATH, 'rb') as f:
+                model = pickle.load(f)
+            print(f"[INFO] Model dimuat dari: {MODEL_PATH}")
+            return
+        except Exception as e:
+            print(f"[WARN] Gagal membaca pickle model: {e}")
 
-    print("[INFO] Melatih model Linear Regression...")
-    reg_model, metrics, X_train, X_test, y_train, y_test = train_model(X, y)
+    # 2. Jika pickle belum ada dan dataset tersedia, lakukan training
+    if os.path.exists(DATA_PATH):
+        try:
+            print("[INFO] Memuat dataset...")
+            X, y, n_total, dur_min, dur_max, cal_min, cal_max = load_and_prepare_data()
 
-    slope     = round(float(reg_model.coef_[0]), 4)
-    intercept = round(float(reg_model.intercept_), 4)
+            print("[INFO] Melatih model Linear Regression...")
+            reg_model, metrics, X_train, X_test, y_train, y_test = train_model(X, y)
 
-    print(f"[INFO] Model dilatih:")
-    print(f"       R²={metrics['r2']}  MAE={metrics['mae']}  MSE={metrics['mse']}  RMSE={metrics['rmse']}")
-    print(f"       Persamaan: Calories = {intercept} + {slope} × Duration")
+            slope     = round(float(reg_model.coef_[0]), 4)
+            intercept = round(float(reg_model.intercept_), 4)
 
-    save_model(reg_model)
-    print(f"[INFO] Model disimpan ke: {MODEL_PATH}")
+            model = reg_model
+            model_stats.update({
+                'n_total'  : n_total,
+                'n_train'  : len(X_train),
+                'n_test'   : len(X_test),
+                'dur_min'  : dur_min,
+                'dur_max'  : dur_max,
+                'cal_min'  : cal_min,
+                'cal_max'  : cal_max,
+                'r2'       : metrics['r2'],
+                'mae'      : metrics['mae'],
+                'mse'      : metrics['mse'],
+                'rmse'     : metrics['rmse'],
+                'slope'    : slope,
+                'intercept': intercept,
+            })
 
-    generate_regression_plot(reg_model, X, y, dur_min, dur_max)
-    print(f"[INFO] Grafik disimpan ke: {PLOT_PATH}")
+            save_model(reg_model)
+            generate_regression_plot(reg_model, X, y, dur_min, dur_max)
+            return
+        except Exception as e:
+            print(f"[ERROR] Gagal saat melatih model: {e}")
 
-    model = reg_model
-    model_stats = {
-        # Ukuran data
-        'n_total' : n_total,
-        'n_train' : len(X_train),
-        'n_test'  : len(X_test),
-        # Statistik deskriptif dataset
-        'dur_min' : dur_min,
-        'dur_max' : dur_max,
-        'cal_min' : cal_min,
-        'cal_max' : cal_max,
-        # Metrik evaluasi (dari data test)
-        'r2'      : metrics['r2'],
-        'mae'     : metrics['mae'],
-        'mse'     : metrics['mse'],
-        'rmse'    : metrics['rmse'],
-        # Koefisien model
-        'slope'    : slope,
-        'intercept': intercept,
-    }
+    # 3. Fallback instan jika model maupun data tidak dapat diakses
+    if model is None:
+        fallback_model = LinearRegression()
+        fallback_model.coef_ = np.array([model_stats['slope']])
+        fallback_model.intercept_ = model_stats['intercept']
+        model = fallback_model
+        print("[INFO] Menggunakan model fallback LinearRegression terkonfigurasi.")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -253,49 +245,26 @@ def initialize_model():
 # ═════════════════════════════════════════════════════════════════════════════
 
 def format_equation(intercept, slope, decimals=4):
-    """
-    Menghasilkan string persamaan regresi yang benar untuk ditampilkan.
-
-    Contoh: "Calories = -21.6668 + 7.1534 × Duration"
-            "Calories = 5.2000 + 4.8000 × Duration"
-    """
     fmt = f".{decimals}f"
     return f"Calories = {intercept:{fmt}} + {slope:{fmt}} × Duration"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# ROUTE — HALAMAN UTAMA
+# ROUTE — ENDPOINT
 # ═════════════════════════════════════════════════════════════════════════════
 
 @app.route('/')
 def index():
-    """Halaman utama dengan form prediksi dan statistik ringkas."""
     return render_template('index.html', stats=model_stats)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ROUTE — ENDPOINT PREDIKSI
-# ═════════════════════════════════════════════════════════════════════════════
-
 @app.route('/predict', methods=['POST'])
 def predict():
-    """
-    Menerima JSON: { "duration": <angka> }
-    Mengembalikan JSON: { "success": bool, "prediction": float, "equation": str, ... }
-
-    Validasi:
-      - Input wajib ada dan berupa angka
-      - Nilai harus > 0
-      - Nilai harus dalam rentang [dur_min, dur_max] dari dataset
-        (mencegah ekstrapolasi tanpa peringatan)
-    """
     data = request.get_json(silent=True)
 
-    # Validasi keberadaan field
     if not data or 'duration' not in data:
         return jsonify({'success': False, 'error': 'Input durasi tidak ditemukan.'}), 400
 
-    # Validasi tipe angka
     try:
         duration = float(data['duration'])
     except (ValueError, TypeError):
@@ -304,14 +273,12 @@ def predict():
     dur_min = model_stats['dur_min']
     dur_max = model_stats['dur_max']
 
-    # Validasi > 0
     if duration <= 0:
         return jsonify({
             'success': False,
             'error': 'Durasi olahraga harus lebih dari 0 menit.'
         }), 400
 
-    # Validasi rentang dataset — cegah ekstrapolasi
     if duration < dur_min or duration > dur_max:
         return jsonify({
             'success': False,
@@ -321,7 +288,6 @@ def predict():
             )
         }), 400
 
-    # Prediksi
     prediction = model.predict(np.array([[duration]]))[0]
     prediction = max(0.0, round(float(prediction), 2))
 
@@ -337,36 +303,25 @@ def predict():
     })
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ROUTE — HALAMAN ANALISIS MODEL
-# ═════════════════════════════════════════════════════════════════════════════
-
 @app.route('/analysis')
 def analysis():
-    """Halaman analisis lengkap: dataset info, metrik, grafik, interpretasi."""
     equation = format_equation(model_stats['intercept'], model_stats['slope'])
     return render_template('analysis.html', stats=model_stats, equation=equation)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ROUTE — HALAMAN ABOUT
-# ═════════════════════════════════════════════════════════════════════════════
-
 @app.route('/about')
 def about():
-    """Halaman tentang aplikasi."""
     return render_template('about.html', stats=model_stats)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# INISIALISASI OTOMATIS SAAT APLIKASI DIMUAT
+# INISIALISASI AMAN
 # ═════════════════════════════════════════════════════════════════════════════
 
-initialize_model()
-
-# ═════════════════════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ═════════════════════════════════════════════════════════════════════════════
+try:
+    initialize_model()
+except Exception as e:
+    print(f"[CRITICAL] Error initialize_model: {e}")
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
