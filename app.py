@@ -342,16 +342,6 @@ def about():
     return render_template('about.html', stats=model_stats)
 
 
-@app.route('/debug')
-def debug_route():
-    return jsonify({
-        'path': request.path,
-        'full_path': request.full_path,
-        'environ_path_info': request.environ.get('PATH_INFO'),
-        'environ_query_string': request.environ.get('QUERY_STRING'),
-    })
-
-
 @app.errorhandler(404)
 def not_found(e):
     return render_template('index.html', stats=model_stats), 404
